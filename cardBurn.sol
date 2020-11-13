@@ -55,7 +55,7 @@ contract CardBurn is ERC721, Ownable, PRNG{
     //正常：生成新的卡片;
     event BurnAndCreate_NewCard(address indexed from, address indexed to, uint256 tokenID, string tokenURI, uint32 cardSequenceNo); 
     //新卡片
-    event NewCard(address indexed from, address indexed to , uint256 tokenID);
+    event NewCard(address indexed from, address indexed to , uint256 tokenID, uint32 cardSequenceNo);
     //
     event PaytoGenerate(address indexed from, address indexed to , uint256 tokenID);
 
@@ -241,7 +241,7 @@ contract CardBurn is ERC721, Ownable, PRNG{
              emit ErrorBurnAndCreate_AttributeIdNotMatchTokenID(cardIndex, createdTokenID);
         }
         //emit BurnAndCreate_NewCard(createdTokenID, tokenURI, items[createdTokenID].cardSequenceNo);    //前台接收到此事件后，写数据库，增加该ERC721 token的条目
-        emit NewCard(msg.sender, player, createdTokenID);
+        emit NewCard(msg.sender, player, createdTokenID, items[createdTokenID].cardSequenceNo);
 
         return createdTokenID;   
     }
