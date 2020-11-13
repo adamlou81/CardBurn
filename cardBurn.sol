@@ -243,7 +243,7 @@ contract CardBurn is ERC721, Ownable, PRNG{
         //emit BurnAndCreate_NewCard(createdTokenID, tokenURI, items[createdTokenID].cardSequenceNo);    //前台接收到此事件后，写数据库，增加该ERC721 token的条目
         emit NewCard(msg.sender, player, createdTokenID);
 
-        return createdTokenID;
+        return createdTokenID;   
     }
 
     function payToGetRandToken(uint256 seed) public payable returns (uint256) {
