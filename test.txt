@@ -126,28 +126,10 @@ contract CardBurn is ERC721, Ownable, PRNG{
     function burnAndCreate(address player, uint256[] memory tokenIDs, uint256 seed) public returns(bool, uint256){
         require(msg.sender == player, "player must be the msg.sender!");
 
-        // if(!isAbleToBurn(tokenIDs)){
-        //     emit ErrorBurnAndCreate_NotAbleToBurn();
-        //     return (false, 0);
-        // }  
-        if(!ownedCards(tokenIDs)){
-            emit ErrorBurnAndCreate_NotOwner();
+        if(!isAbleToBurn(tokenIDs)){
+            emit ErrorBurnAndCreate_NotAbleToBurn();
             return (false, 0);
-        } 
-        bool same = true;
-        (same,) = allTheSameLevel(tokenIDs);
-        if(!same){
-            emit ErrorBurnAndCreate_NotSameLevelCards();
-            return (false, 0);
-        }
-        if(!isLegalCardsCount(tokenIDs)){
-            emit ErrorBurnAndCreate_IllegalCardsCount();
-            return (false, 0);
-        }
-        if(containHighestLevelCard(tokenIDs)){
-            emit ErrorBurnAndCreate_ContainHighestLevelCard();
-            return (false, 0);
-        }
+        }   
 
         bool isHigherLevelCardGenerated;
         bool isElite;
@@ -156,7 +138,7 @@ contract CardBurn is ERC721, Ownable, PRNG{
 
         //1. 判断是否有新卡片（更高级）生成，如果没有，返回false（第一个返回值）
         if(!isHigherLevelCardGenerated){
-            emit BurnAndCreate_NotCreateCard();      
+            emit BurnAndCreate_NotCreateCard();
             return (false, 0);
         }       
         //2. 焚烧卡片
@@ -378,17 +360,16 @@ contract CardBurn is ERC721, Ownable, PRNG{
 
         uint32 level = items[tokenIdToItemId(tokenIDs[0])].cardLevel;
         for(uint i = 1; i < tokenIDs.length; i++){
-            if(level != items[tokenIdToItemId(tokenIDs[i])].cardLevel)  return (false, 0);     
-           
+            if(level != items[tokenIdToItemId(tokenIDs[i])].cardLevel)    return (false, 0);
         }
         return (true, level);
     }
 
     function containHighestLevelCard(uint256[] memory tokenIDs) view private returns(bool){
         for(uint i = 0; i < tokenIDs.length; i++){
-            if(items[tokenIdToItemId(tokenIDs[i])].cardLevel == _sysParams.levelCount)    return true;
+            if(items[tokenIdToItemId(tokenIDs[i])].cardLevel == _sysParams.levelCount)    return false;
         }
-        return false;
+        return true;
     }
     
     function containEliteCard(uint256[] memory tokenIDs) private view returns(bool){
