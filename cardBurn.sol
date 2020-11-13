@@ -22,6 +22,7 @@ contract CardBurn is ERC721, Ownable, PRNG{
         bool isElite;                               //是否是精英卡片,精英卡片的设定应该是非常稀有
     }
     cardAttributes[] items;
+    
 
     struct SysParams{
         uint32  maxCardsNo;                     //整副卡片的张数；（不重复）
@@ -234,14 +235,10 @@ contract CardBurn is ERC721, Ownable, PRNG{
         cardIndex = randomGenerateCertainLevelCard(isElite, currentCardsLevel, seed);
         //2. 组装成新的ERC721 token
         string memory tokenURI = randCreateTokenURI(seed);
-        uint256 createdTokenID = awardItem(player, tokenURI);                   //attension: 此处理论上cardIndex == createdTokenID;此种情况在正式坏境不应该发生；
+        uint256 createdTokenID = awardItem(player, tokenURI);                   //attension: 此处理论上cardIndex == createdTokenID - 1
         //playerToTokenIDs[player].push(createdTokenID);
         //3. 判断结果，并触发对应的事件
-        if(cardIndex !=   createdTokenID){
-             emit ErrorBurnAndCreate_AttributeIdNotMatchTokenID(cardIndex, createdTokenID);
-        }
-        //emit BurnAndCreate_NewCard(createdTokenID, tokenURI, items[createdTokenID].cardSequenceNo);    //前台接收到此事件后，写数据库，增加该ERC721 token的条目
-        emit NewCard(msg.sender, player, createdTokenID, items[createdTokenID].cardSequenceNo);
+        emit NewCard(msg.sender, player, createdTokenID, items[tokenIdToItemId(createdTokenID)].cardSequenceNo);
 
         return createdTokenID;   
     }
@@ -285,7 +282,7 @@ contract CardBurn is ERC721, Ownable, PRNG{
     }
 
     function getItemAttributes(uint256 tokenID) public view returns(string memory, uint32, uint32, bool){
-        return (items[tokenID].value, items[tokenID].cardSequenceNo, items[tokenID].cardLevel, items[tokenID].isElite);
+        return (items[tokenIdToItemId(tokenID)].value, items[tokenIdToItemId(tokenID)].cardSequenceNo, items[tokenIdToItemId(tokenID)].cardLevel, items[tokenIdToItemId(tokenID)].isElite);
     }
 
     function contractURI() public pure returns (string memory) {
@@ -361,23 +358,23 @@ contract CardBurn is ERC721, Ownable, PRNG{
     function allTheSameLevel(uint256[] memory tokenIDs) view private returns(bool, uint32){
         if(tokenIDs.length == 0 || tokenIDs.length == 1)  return (true, _sysParams.levelCount);
 
-        uint32 level = items[tokenIDs[0]].cardLevel;
+        uint32 level = items[tokenIdToItemId(tokenIDs[0])].cardLevel;
         for(uint i = 1; i < tokenIDs.length; i++){
-            if(level != items[tokenIDs[i]].cardLevel)    return (false, 0);
+            if(level != items[tokenIdToItemId(tokenIDs[i])].cardLevel)    return (false, 0);
         }
         return (true, level);
     }
 
     function containHighestLevelCard(uint256[] memory tokenIDs) view private returns(bool){
         for(uint i = 0; i < tokenIDs.length; i++){
-            if(items[tokenIDs[i]].cardLevel == _sysParams.levelCount)    return false;
+            if(items[tokenIdToItemId(tokenIDs[i])].cardLevel == _sysParams.levelCount)    return false;
         }
         return true;
     }
     
     function containEliteCard(uint256[] memory tokenIDs) private view returns(bool){
         for(uint i = 0; i < tokenIDs.length; i++){
-            if(items[tokenIDs[i]].isElite)    return true;
+            if(items[tokenIdToItemId(tokenIDs[i])].isElite)    return true;
         }
         return false;
     }
@@ -405,6 +402,10 @@ contract CardBurn is ERC721, Ownable, PRNG{
         return tokenURI.toString();
     }
 
+    function getCurrentItemLengthAndTokenLength() public view returns(uint256, uint256){
+        return (items.length, totalSupply());
+    }
+
 
 
 
@@ -428,6 +429,10 @@ contract CardBurn is ERC721, Ownable, PRNG{
 
     function getAccountBalance(address player) public view returns (uint256){
         return player.balance;
+    }
+
+    function tokenIdToItemId(uint256 tokenID) private pure returns(uint256 itemID){
+        return tokenID.sub(1);
     }
 
     //function getOwnerItems(address owner) public view return()
