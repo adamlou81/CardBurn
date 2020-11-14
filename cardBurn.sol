@@ -39,32 +39,14 @@ contract CardBurn is ERC721, Ownable, PRNG{
     }
     SysParams _sysParams;  
 
-    //错误：没有权限焚烧卡片；
-    event ErrorBurnAndCreate_NotOwner();
-    //错误：不是同level的卡片；
-    event ErrorBurnAndCreate_NotSameLevelCards();
-    //错误：卡片数量不正确
-    event ErrorBurnAndCreate_IllegalCardsCount();
-    //错误：包含最高级别的卡片
-    event ErrorBurnAndCreate_ContainHighestLevelCard();
-    //错误：卡片焚烧前，合法性校验没有通过
-    event ErrorBurnAndCreate_NotAbleToBurn();
-    //错误：焚烧并生成新卡片后，卡片属性和tokenID不一致
-    event ErrorBurnAndCreate_AttributeIdNotMatchTokenID(uint256 cardAttributesID, uint256 tokenID);   
     //正常：焚烧卡片后，没有生成新卡片；
     event BurnAndCreate_NotCreateCard();
     //正常：焚烧卡片完成；
     event BurnAndCreate_CardsBurned();  
-    //正常：生成新的卡片;
-    event BurnAndCreate_NewCard(address indexed from, address indexed to, uint256 tokenID, string tokenURI, uint32 cardSequenceNo); 
-    //新卡片
+    //生成了新卡片
     event NewCard(address indexed from, address indexed to , uint256 tokenID, uint32 cardSequenceNo);
-    //
+    //用户付款生成卡片后触发
     event PaytoGenerate(address indexed from, address indexed to , uint256 tokenID);
-
-    event TokenNotExist(uint256 tokenID);
-
-
 
     //设置每一层的区间起始和终止下标；设置MaxCardNo；
     //length: 每层的卡片数量，【默认为相同】
@@ -120,6 +102,7 @@ contract CardBurn is ERC721, Ownable, PRNG{
         for(uint i = 0; i < tokenIDs.length; i++){
             _burn(tokenIDs[i]);
         }
+        emit BurnAndCreate_CardsBurned();
     }
 
     function awardItem(address player, string memory tokenURI) private returns (uint256){
@@ -138,29 +121,12 @@ contract CardBurn is ERC721, Ownable, PRNG{
     //player: 新生产卡片的owner；
     function burnAndCreate(address player, uint256[] memory tokenIDs, uint256 seed) public returns(bool, uint256){
         require(msg.sender == player, "player must be the msg.sender!");
-
-        // if(!isAbleToBurn(tokenIDs)){
-        //     emit ErrorBurnAndCreate_NotAbleToBurn();
-        //     return (false, 0);
-        // }  
-        if(!ownedCards(tokenIDs)){
-            emit ErrorBurnAndCreate_NotOwner();
-            return (false, 0);
-        } 
+        require(ownedCards(tokenIDs), "Player do not own all the selected cards!");
+        require(isLegalCardsCount(tokenIDs), "Illegal Cards Amount which are to be burned!");
+        require(!containHighestLevelCard(tokenIDs), "Contain Highest Level Cards!");
         bool same = true;
         (same,) = allTheSameLevel(tokenIDs);
-        if(!same){
-            emit ErrorBurnAndCreate_NotSameLevelCards();
-            return (false, 0);
-        }
-        if(!isLegalCardsCount(tokenIDs)){
-            emit ErrorBurnAndCreate_IllegalCardsCount();
-            return (false, 0);
-        }
-        if(containHighestLevelCard(tokenIDs)){
-            emit ErrorBurnAndCreate_ContainHighestLevelCard();
-            return (false, 0);
-        }
+        require(same, "Different Cards Level!");
 
         bool isHigherLevelCardGenerated;
         bool isElite;
@@ -220,7 +186,7 @@ contract CardBurn is ERC721, Ownable, PRNG{
         else level = 10;
 
         uint256 tokenID = randGenerateToken(msg.sender, false, level, seed);
-        PaytoGenerate(msg.sender, msg.sender, tokenID);
+        emit PaytoGenerate(msg.sender, msg.sender, tokenID);
         //只随机产生非精英、等级为1的卡片
         return tokenID;//randGenerateToken(msg.sender, false, 1, seed);
 
