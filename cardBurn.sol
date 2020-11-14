@@ -292,6 +292,9 @@ contract CardBurn is ERC721, Ownable, PRNG{
     }
 
     function getSysParams() public view returns(uint32,uint32,uint32,uint32,uint32){ 
+
+
+        
         return (_sysParams.maxCardsNo, _sysParams.maxCardsCanBeBurned, _sysParams.elitePossibility, _sysParams.extraElitePossibility, _sysParams.levelCount);
     }
 
