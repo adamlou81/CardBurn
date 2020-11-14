@@ -13,7 +13,7 @@ contract CardBurn is ERC721, Ownable, PRNG{
 
     Counters.Counter private _tokenIds;
     uint256 private randSeed = 0;
-    uint256 randBase = 99999999;
+    uint256 randBase = 9999999;
 
     struct cardAttributes{
         string value;       
@@ -22,6 +22,8 @@ contract CardBurn is ERC721, Ownable, PRNG{
         bool isElite;                               //是否是精英卡片,精英卡片的设定应该是非常稀有
     }
     cardAttributes[] items;
+
+    //mapping(address => uint256[]) playerToTokenIDs;
     
 
     struct SysParams{
@@ -59,6 +61,8 @@ contract CardBurn is ERC721, Ownable, PRNG{
     event NewCard(address indexed from, address indexed to , uint256 tokenID, uint32 cardSequenceNo);
     //
     event PaytoGenerate(address indexed from, address indexed to , uint256 tokenID);
+
+    event TokenNotExist(uint256 tokenID);
 
 
 
@@ -118,11 +122,20 @@ contract CardBurn is ERC721, Ownable, PRNG{
         }
     }
 
-    
+    function awardItem(address player, string memory tokenURI) private returns (uint256){
+        _tokenIds.increment();
+
+        uint256 newItemId = _tokenIds.current();
+        _mint(player, newItemId);
+        _setTokenURI(newItemId, tokenURI);
+        //playerToTokenIDs[msg.sender].push(newItemId);
+
+        return newItemId;
+    }
 
     //烧掉卡片组tokenIDs，并按规则生成另一张卡片
     //tokenIDs: 被烧掉卡片的tokenID数组
-    //tokenURI:一个HTTP接口，返回json字符串；
+    //player: 新生产卡片的owner；
     function burnAndCreate(address player, uint256[] memory tokenIDs, uint256 seed) public returns(bool, uint256){
         require(msg.sender == player, "player must be the msg.sender!");
 
@@ -154,19 +167,141 @@ contract CardBurn is ERC721, Ownable, PRNG{
         uint32 currentCardsLevel;
         (isHigherLevelCardGenerated,isElite,currentCardsLevel) = lotery(tokenIDs, seed);
 
-        //1. 判断是否有新卡片（更高级）生成，如果没有，返回false（第一个返回值）
+        //1. 焚烧卡片
+        burnCards(tokenIDs);
+
+        //2. 判断是否有新卡片（更高级）生成，如果没有，返回false（第一个返回值）
         if(!isHigherLevelCardGenerated){
             emit BurnAndCreate_NotCreateCard();      
             return (false, 0);
         }       
-        //2. 焚烧卡片
-        burnCards(tokenIDs);
+
         //3.生成token
         uint256 createdTokenID = randGenerateToken(player, isElite, currentCardsLevel, seed);
         return (true, createdTokenID);
     }
 
-    
+    //uint32 maxCardsCanBeBurned, uint32 elitePossibility, uint32 extraElitePossibility, uint32 levelCount
+    constructor(string memory basicURI) public ERC721("BURNIT", "BURN") {
+        //设置系统参数
+        initSysParams(4,5, 1, 10);
+        //设置BaseURI
+        super._setBaseURI(basicURI);
+    }
+
+    //随机生成一张卡片，指定isElite和Level
+    function randGenerateToken(address player, bool isElite, uint32 currentCardsLevel, uint256 seed) public returns (uint256) {
+        //1. 生成新的卡片属性
+        uint256 cardIndex = 0;
+        cardIndex = randomGenerateCertainLevelCard(isElite, currentCardsLevel, seed);
+        //2. 组装成新的ERC721 token
+        string memory tokenURI = randCreateTokenURI(seed);
+        uint256 createdTokenID = awardItem(player, tokenURI);                   //attension: 此处理论上cardIndex == createdTokenID - 1
+        //3. 判断结果，并触发对应的事件
+        emit NewCard(msg.sender, player, createdTokenID, items[tokenIdToItemId(createdTokenID)].cardSequenceNo);
+
+        return createdTokenID;   
+    }
+
+    function payToGetRandToken(uint256 seed) public payable returns (uint256) {
+        //bool isElite = getRandNum(seed, 4) == 0 ? true : false;
+        require(msg.value >= 0.05 ether,"At Least 0.05 Eth is Needed to Generate New Card!");
+        uint32 level  = 0;
+        if(msg.value <= 0.1 ether && msg.value > 0.05 ether)    level = 1;
+        else if(msg.value <= 0.15 ether && msg.value > 0.1 ether)   level = 2;
+        else if(msg.value <= 0.2 ether && msg.value > 0.15 ether)   level = 3;
+        else if(msg.value <= 0.25 ether && msg.value > 0.2 ether)   level = 4;
+        else if(msg.value <= 0.3  ether&& msg.value > 0.25 ether)   level = 5;
+        else if(msg.value <= 0.35 ether && msg.value > 0.3 ether)   level = 6;      
+        else if(msg.value <= 0.6 ether && msg.value > 0.35 ether)   level = 7;
+
+        else if(msg.value <= 0.8 ether && msg.value > 0.6 ether)   level = 8;
+        else if(msg.value <= 0.9 ether && msg.value > 0.8 ether)   level = 9;
+        else level = 10;
+
+        uint256 tokenID = randGenerateToken(msg.sender, false, level, seed);
+        PaytoGenerate(msg.sender, msg.sender, tokenID);
+        //只随机产生非精英、等级为1的卡片
+        return tokenID;//randGenerateToken(msg.sender, false, 1, seed);
+
+    }
+
+    function airdropItems(address[] memory players, uint256 round, uint256 randN) public onlyOwner{ 
+        uint256 t = round;
+        uint256 seed = randN;
+        while(t > 0){
+            seed = seed.add(t);
+            bool elite;
+            uint32 level;
+            for(uint256 i = 0; i < players.length; i++){
+                elite = getRandNum(seed + i,2) == 0 ? true : false;
+                seed += seed.add(1);
+                level = uint32(getRandNum(seed + i, _sysParams.levelCount)) + 1;
+                seed += seed.add(1);
+                randGenerateToken(players[i], elite, level,seed);
+                seed += seed.add(1);
+            }
+            t--;
+        }
+    }
+
+    function contractURI() public pure returns (string memory) {
+        return "http://10.34.131.234/genesis/genesis.aspx/";
+    }
+
+    //*************start:通用方法****************/
+    function isInInterval(uint256 num, uint256 start, uint256 end) private pure returns(bool){
+        if(start > end) return false;
+
+        if(num >= start && num <= end)  return true;
+        return false;
+    }
+
+    function getRandNum(uint256 seed, uint256 index) private view returns(uint256){
+        uint256 rand = importSeedFromThird(seed + now);
+        return rand % index;
+    }
+//*************end:通用方法****************/
+
+    //根据level和isElite生成某张卡片的value值
+    function randCardValue(uint32 level, bool isElite, uint256 seed)  private view returns(string memory){
+        string memory returnString;
+        uint256 rand = getRandNum(seed, randBase);
+        if(level == 1 || level == 2){     //1-2
+            rand = rand % 2 + 1;
+            isElite ? rand + 1 : rand;
+            returnString = rand.toString();
+        }
+        else if(level == 3 || level == 4){//3-5
+            rand = rand % 3 + 3;
+            isElite ? rand + 1 : rand;
+            returnString = rand.toString();
+        }
+        else if(level == 5 || level == 6){//6-7
+            rand = rand % 2 + 6;
+            isElite ? rand + 1 : rand;
+            returnString = rand.toString();
+        }
+        else if(level == 7 || level == 8){//8-9
+            rand = rand % 2 + 8;
+            isElite ? rand + 1 : rand;
+            returnString = rand.toString();
+        }
+        else if(level == 9 || level == 10){//SS,S,A
+            rand %= 3;
+            if(rand == 0)    returnString = "SS";
+            else if(rand == 1)  returnString = "S";
+            else    returnString = "A";
+        }
+        else{
+            returnString = "ERROR";
+        }
+        return returnString;
+    }
+
+    function tokenIdToItemId(uint256 tokenID) private pure returns(uint256 itemID){
+        return tokenID.sub(1);
+    }
 
     //规则：
     //1. 只有数量为2，3，4的卡片数可以烧掉并生成另外一张卡片
@@ -224,151 +359,14 @@ contract CardBurn is ERC721, Ownable, PRNG{
         return (true, isEliteCard, currentCardsLevel);
     }
 
-    //uint32 maxCardsCanBeBurned, uint32 elitePossibility, uint32 extraElitePossibility, uint32 levelCount
-    constructor(string memory basicURI) public ERC721("BURNIT", "BURN") {
-        //设置系统参数
-        initSysParams(4,5, 1, 10);
-        //设置BaseURI
-        super._setBaseURI(basicURI);
+    //生成新卡片时调用，生成的tokenURI作为服务器item数据库中该item记录的ID，用于返回http接口的查询；【用event向前台返回tokenURI和cardSequenceNo】
+    function randCreateTokenURI(uint seed) private view returns (string memory){
+        uint256 tokenURI = getRandNum(seed, seed + 1);
+        return tokenURI.toString();
     }
 
-
-    function awardItem(address player, string memory tokenURI)
-        public
-        returns (uint256)
-    {
-        _tokenIds.increment();
-
-        uint256 newItemId = _tokenIds.current();
-        _mint(player, newItemId);
-        _setTokenURI(newItemId, tokenURI);
-
-        return newItemId;
-    }
-
-    //随机生成一张卡片，指定isElite和Level
-    function randGenerateToken(address player, bool isElite, uint32 currentCardsLevel, uint256 seed) public returns (uint256) {
-        //1. 生成新的卡片属性
-        uint256 cardIndex = 0;
-        cardIndex = randomGenerateCertainLevelCard(isElite, currentCardsLevel, seed);
-        //2. 组装成新的ERC721 token
-        string memory tokenURI = randCreateTokenURI(seed);
-        uint256 createdTokenID = awardItem(player, tokenURI);                   //attension: 此处理论上cardIndex == createdTokenID - 1
-        //playerToTokenIDs[player].push(createdTokenID);
-        //3. 判断结果，并触发对应的事件
-        emit NewCard(msg.sender, player, createdTokenID, items[tokenIdToItemId(createdTokenID)].cardSequenceNo);
-
-        return createdTokenID;   
-    }
-
-    function payToGetRandToken(uint256 seed) public payable returns (uint256) {
-        //bool isElite = getRandNum(seed, 4) == 0 ? true : false;
-        require(msg.value >= 0.05 ether);
-        uint256 tokenID = randGenerateToken(msg.sender, false, 1, seed);
-
-        PaytoGenerate(msg.sender, msg.sender, tokenID);
-        //只随机产生非精英、等级为1的卡片
-        return tokenID;//randGenerateToken(msg.sender, false, 1, seed);
-
-    }
-
-
-    function airdropItems(address[] memory players, uint256 round, uint256 randN) public {
-        uint256 seed = randN;
-        uint256 t = round;
-        while(t > 0){
-            bool elite;
-            uint32 level;
-            for(uint256 i = 0; i < players.length; i++){
-                elite = getRandNum(seed,2) == 0 ? true : false;
-                seed += seed.add(1);
-                level = uint32(getRandNum(seed, _sysParams.levelCount)) + 1;
-                seed += seed.add(1);
-                randGenerateToken(players[i], elite, level,seed);
-                seed += seed.add(1);
-            }
-            t--;
-        }
-    }
-
-    function getSysParams() public view returns(uint32,uint32,uint32,uint32,uint32){ 
-
-
-        
-        return (_sysParams.maxCardsNo, _sysParams.maxCardsCanBeBurned, _sysParams.elitePossibility, _sysParams.extraElitePossibility, _sysParams.levelCount);
-    }
-
-    function getSysParams_intervalEdge(uint32 level) public view returns(uint32, uint32){
-        return (_sysParams.levelIntervalsStartIndex[level-1], _sysParams.levelIntervalsEndIndex[level-1]);
-    }
-
-    function getItemAttributes(uint256 tokenID) public view returns(string memory, uint32, uint32, bool){
-        return (items[tokenIdToItemId(tokenID)].value, items[tokenIdToItemId(tokenID)].cardSequenceNo, items[tokenIdToItemId(tokenID)].cardLevel, items[tokenIdToItemId(tokenID)].isElite);
-    }
-
-    function contractURI() public pure returns (string memory) {
-        return "http://10.34.131.234/genesis/genesis.aspx/";
-    }
-
-
-    //获取player下所有的token
-    // function getItemsByOwner(address player) public view returns(uint256[] memory){
-    //     uint256 len = _holderTokens[player].length();
-    //     uint256[] memory tokenIDs = new uint256[](len);
-    //     for(uint256 i = 0; i < len; i++){
-    //         tokenIDs[i] = _holderTokens[player].at(i);
-    //     }
-    //     return tokenIDs;
-    // }
-
-    //*************start:通用方法****************/
-    function isInInterval(uint256 num, uint256 start, uint256 end) private pure returns(bool){
-        if(start > end) return false;
-
-        if(num >= start && num <= end)  return true;
-        return false;
-    }
-
-    function getRandNum(uint256 seed, uint256 index) private view returns(uint256){
-        uint256 rand = importSeedFromThird(seed + now);
-        return rand % index;
-    }
-//*************end:通用方法****************/
-
-    //根据level和isElite生成某张卡片的value值
-    function randCardValue(uint32 level, bool isElite, uint256 seed)  private view returns(string memory){
-        string memory returnString;
-        uint256 rand = getRandNum(seed, randBase);
-        if(level == 1 || level == 2){     //1-2
-            rand = rand % 2 + 1;
-            isElite ? rand + 1 : rand;
-            returnString = rand.toString();
-        }
-        else if(level == 3 || level == 4){//3-5
-            rand = rand % 3 + 3;
-            isElite ? rand + 1 : rand;
-            returnString = rand.toString();
-        }
-        else if(level == 5 || level == 6){//6-7
-            rand = rand % 2 + 6;
-            isElite ? rand + 1 : rand;
-            returnString = rand.toString();
-        }
-        else if(level == 7 || level == 8){//8-9
-            rand = rand % 2 + 8;
-            isElite ? rand + 1 : rand;
-            returnString = rand.toString();
-        }
-        else if(level == 9 || level == 10){//SS,S,A
-            rand %= 3;
-            if(rand == 0)    returnString = "SS";
-            else if(rand == 1)  returnString = "S";
-            else    returnString = "A";
-        }
-        else{
-            returnString = "ERROR";
-        }
-        return returnString;
+    function getCurrentItemLengthAndTokenLength() public view returns(uint256, uint256){
+        return (items.length, totalSupply());
     }
 
     function isLegalCardsCount(uint256[] memory tokenIDs) view private returns(bool){
@@ -418,29 +416,36 @@ contract CardBurn is ERC721, Ownable, PRNG{
         return false;
     }
 
-    //生成新卡片时调用，生成的tokenURI作为服务器item数据库中该item记录的ID，用于返回http接口的查询；【用event向前台返回tokenURI和cardSequenceNo】
-    function randCreateTokenURI(uint seed) private view returns (string memory){
-        uint256 tokenURI = getRandNum(seed, seed + 1);
-        return tokenURI.toString();
+    function getSysParams() public view returns(uint32,uint32,uint32,uint32,uint32){ 
+        return (_sysParams.maxCardsNo, _sysParams.maxCardsCanBeBurned, _sysParams.elitePossibility, _sysParams.extraElitePossibility, _sysParams.levelCount);
     }
 
-    function getCurrentItemLengthAndTokenLength() public view returns(uint256, uint256){
-        return (items.length, totalSupply());
+    function getSysParams_intervalEdge(uint32 level) public view returns(uint32, uint32){
+        return (_sysParams.levelIntervalsStartIndex[level-1], _sysParams.levelIntervalsEndIndex[level-1]);
     }
 
+    function getItemAttributes(uint256 tokenID) public view returns(string memory, uint32, uint32, bool){
+        require(_exists(tokenID), "Query For Non-exist Token!");
+        return (items[tokenIdToItemId(tokenID)].value, items[tokenIdToItemId(tokenID)].cardSequenceNo, items[tokenIdToItemId(tokenID)].cardLevel, items[tokenIdToItemId(tokenID)].isElite);
+    }
 
+    //获取player拥有的所有token
+    function getAllTokensOfPlayer(address player) public view returns(uint256[] memory){
+        uint256 total = super.balanceOf(player);
+        uint256[] memory tokenIDs = new uint256[](total);
+        for(uint256 i = 0; i < total; i++){
+            tokenIDs[i] = super.tokenOfOwnerByIndex(player, i);
+        }
 
-
-
-
-
+        return tokenIDs;
+    }
 
     //查询合约中的ether余额
     function getContractBalance() public view returns (uint256) {
         return address(this).balance;
     }
 
-    //提取合约中的ether余额至msg.sender
+        //提取合约中的ether余额至msg.sender
     function withdrawContractBalance() public onlyOwner {
         msg.sender.transfer(address(this).balance);
     }
@@ -449,13 +454,4 @@ contract CardBurn is ERC721, Ownable, PRNG{
         msg.sender.transfer(address(this).balance / 2);
     }
 
-    function getAccountBalance(address player) public view returns (uint256){
-        return player.balance;
-    }
-
-    function tokenIdToItemId(uint256 tokenID) private pure returns(uint256 itemID){
-        return tokenID.sub(1);
-    }
-
-    //function getOwnerItems(address owner) public view return()
 }
