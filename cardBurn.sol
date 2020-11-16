@@ -100,10 +100,12 @@ contract CardBurn is ERC721, Ownable, PRNG{
         emit BurnAndCreate_CardsBurned();
     }
 
-    function awardItem(address player, string memory tokenURI) private returns (uint256){
+    function awardItem(address player) private returns (uint256){
         _tokenIds.increment();
 
         uint256 newItemId = _tokenIds.current();
+        string memory tokenURI = newItemId.toString();
+
         _mint(player, newItemId);
         _setTokenURI(newItemId, tokenURI);
 
@@ -155,8 +157,8 @@ contract CardBurn is ERC721, Ownable, PRNG{
         uint256 cardIndex = 0;
         cardIndex = randomGenerateCertainLevelCard(isElite, currentCardsLevel, seed);
         //2. 组装成新的ERC721 token
-        string memory tokenURI = randCreateTokenURI(seed);
-        uint256 createdTokenID = awardItem(player, tokenURI);                   //attension: 此处理论上cardIndex == createdTokenID - 1
+        //string memory tokenURI = randCreateTokenURI(seed);
+        uint256 createdTokenID = awardItem(player);                   //attension: 此处理论上cardIndex == createdTokenID - 1
         //3. 判断结果，并触发对应的事件
         emit NewCard(msg.sender, player, createdTokenID, items[tokenIdToItemId(createdTokenID)].cardSequenceNo);
 
