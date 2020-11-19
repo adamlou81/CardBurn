@@ -37,7 +37,7 @@ contract CardBurn is ERC721, Ownable, PRNG{
     SysParams private _sysParams;  
 
     //正常：焚烧卡片后，没有生成新卡片；
-    event BurnAndCreate_NotCreateCard();
+    event BurnAndCreate_NotCreateCard(address indexed from, address indexed to, uint256[] burnedCards);
     //正常：焚烧卡片完成；
     event BurnAndCreate_CardsBurned();  
     //生成了新卡片
@@ -134,7 +134,7 @@ contract CardBurn is ERC721, Ownable, PRNG{
 
         //2. 判断是否有新卡片（更高级）生成，如果没有，返回false（第一个返回值）
         if(!isHigherLevelCardGenerated){
-            emit BurnAndCreate_NotCreateCard();      
+            emit BurnAndCreate_NotCreateCard(msg.sender, player, tokenIDs);      
             return (false, 0);
         }       
 
