@@ -273,7 +273,7 @@ contract CardBurn is ERC721, Ownable, PRNG{
         return returnString;
     }
 
-    //根据用户的付款，判断生成的卡片等级
+    //根据用户的付款，判断生成的ERC 721 token等级
     function setCardLevelAccordingToPayment() private returns(uint32){
         uint32 level  = 0;
         if(msg.value <= 0.1 ether && msg.value > 0.05 ether)    level = 1;

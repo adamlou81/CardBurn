@@ -11,8 +11,6 @@ contract Genesis is ERC721, Ownable{
     using Strings for uint256;
 
     Counters.Counter private _tokenIds;
-    // private randSeed = 0;
-    //uint256 private randBase = 9999999;
 
     struct cardAttributes{
         //卡片4个方向的战斗数值；
@@ -55,7 +53,7 @@ contract Genesis is ERC721, Ownable{
         _sysParams.levelCount = levelCount;
 
         _sysParams.NumberOfCardsInLevel.push(0);    //第0层的卡片数量是0；
-        for(uint256 i = 0; i < NumberOfCardsInLevel.length; i++){
+        for(uint256 i = 1; i < NumberOfCardsInLevel.length; i++){
             _sysParams.NumberOfCardsInLevel.push(NumberOfCardsInLevel[i]);
         }
     }
@@ -68,7 +66,7 @@ contract Genesis is ERC721, Ownable{
     //返回：
     //1. 该level卡片的单个方向战斗值最小值
     //2. 该level卡片的单个方向战斗值最大值
-    function setMaxAndMinBattleValue(uint32 level)private view returns(uint32,uint32){
+    function setMaxAndMinBattleValue(uint32 level) private pure returns(uint32,uint32){
         return (level, level+2);
     }
 
@@ -85,11 +83,11 @@ contract Genesis is ERC721, Ownable{
         uint256 s = seed;
         
         up = uint32(getRandNum(s, l) + uint256(minValue));
-        s.add(1);
+        s += s.add(1);
         down = uint32(getRandNum(s, l) + uint256(minValue));
-        s.add(1);
+        s += s.add(1);
         left = uint32(getRandNum(s, l) + uint256(minValue));
-        s.add(1);
+        s += s.add(1);
         right = uint32(getRandNum(s, l) + uint256(minValue));
 
         return (up, down, left, right);
@@ -136,13 +134,13 @@ contract Genesis is ERC721, Ownable{
         cardAttributes memory card;                           
 
         card.level = level == 0 ? randLevel(seed) : level;
-        seed.add(1);
+        seed += seed.add(1);
         (card.up, card.down, card.left, card.right) = rand4BattleValue(card.level, seed);
-        seed.add(1);
+        seed += seed.add(1);
         card.indexInLevel = randIndexInLevel(card.level, seed);
-        seed.add(1);
+        seed += seed.add(1);
         card.element = randElement( seed);
-        seed.add(1);
+        seed += seed.add(1);
         card.isElite = isElite ? true : randIsElite(seed);
         cards.push(card);
     }
@@ -151,16 +149,28 @@ contract Genesis is ERC721, Ownable{
     //如果入参level == 0, 则卡片level也随机；
     //如果入参isElite == false, 则卡片的isElite属性随机；
     //用户每次随机价格是0.005，多付不退；
-    function randToken(address player, bool isElite, uint32 level, uint256 seed) public payable returns (uint256) {
+    function randToken(address player, uint256 seed) public payable returns (uint256) {
         require(msg.value >= 0.005 ether,"At Least 0.005 Eth is Needed to Generate New Card!");
 
         //1. 生成新的卡片属性
-        randCard(level, isElite, seed);
+        randCard(0, false, seed);
         //2. 组装成新的ERC721 token
         uint256 createdTokenID = awardItem(player);                   //attension: 此处理论上cards数组的长度 == createdTokenID，即cards数组根据下标一一对应tokenID
         //3. 判断结果，并触发对应的事件
         emit NewCard(msg.sender, player, createdTokenID);
-        return createdTokenID;   
+        return createdTokenID; 
+    }
+
+    function randTokenForBurn(address player, uint256 seed) private returns (uint256) {
+        //require(msg.value >= 0.005 ether,"At Least 0.005 Eth is Needed to Generate New Card!");
+
+        //1. 生成新的卡片属性
+        randCard(0, false, seed);
+        //2. 组装成新的ERC721 token
+        uint256 createdTokenID = awardItem(player);                   //attension: 此处理论上cards数组的长度 == createdTokenID，即cards数组根据下标一一对应tokenID
+        //3. 判断结果，并触发对应的事件
+        emit NewCard(msg.sender, player, createdTokenID);
+        return createdTokenID; 
     }
 
     //发行token
@@ -217,7 +227,7 @@ contract Genesis is ERC721, Ownable{
         bool isElite;
         uint32 level;
         (isHigherLevelCardGenerated,isElite,level) = lotery(tokenIDs, seed);
-        seed.add(1);
+        seed += seed.add(1);
 
         //1. 焚烧卡片
         burnCards(tokenIDs);
@@ -229,7 +239,7 @@ contract Genesis is ERC721, Ownable{
         }       
 
         //3.生成token
-        uint256 createdTokenID = this.randToken(msg.sender, isElite, level, seed);
+        uint256 createdTokenID = randTokenForBurn(msg.sender, seed);
         return (true, createdTokenID);
     }
 
@@ -247,11 +257,11 @@ contract Genesis is ERC721, Ownable{
         super._setBaseURI(basicURI);
     }
 
-    function getSysParams() public view returns(uint32,uint32,uint32,uint32){   
+    function getSysParams() public view onlyOwner returns(uint32,uint32,uint32,uint32){   
         return ( _sysParams.maxCardsCanBeBurned, _sysParams.elitePossibility, _sysParams.extraElitePossibility, _sysParams.levelCount);
     }
 
-    function getNumberOfCardsInLevel(uint32 level) public view returns(uint32){
+    function getNumberOfCardsInLevel(uint32 level) public view onlyOwner returns(uint32){
         return _sysParams.NumberOfCardsInLevel[level];
     }
 
@@ -275,6 +285,87 @@ contract Genesis is ERC721, Ownable{
 
         return tokenIDs;
     }
+
+    //test function
+    function getItemLength() public onlyOwner view returns(uint256){
+        return cards.length;
+    }
+
+    //admin tools
+    //player == address(0):不过滤player;
+    //level == 0:不过滤level；
+    //containIsElite == false:不过滤isElite;
+    function getToken(address player, uint32 level, bool containIsElite, bool isElite) public view onlyOwner returns(uint256[] memory){
+        uint256[] memory tokenIDs;
+        uint256 total;
+        uint32 l;
+        uint32 index;
+        uint32 element;
+        bool elite;
+
+        uint256 count = 0;       
+        if(player == address(0)){
+            total = super.totalSupply();
+            uint256[] memory temp = new uint256[](total);
+            for(uint256 i = 0; i < total; i++){
+                (l, index, element, elite) = getItemAttributes_exceptBattleValues(super.tokenByIndex(i));
+                if(level != 0){
+                    if(l != level)  continue;        
+                }
+                if(containIsElite){
+                    if(elite != isElite)    continue;
+                }
+                temp[count] = super.tokenByIndex(i);
+                count++;
+            }
+            tokenIDs = new uint256[](count);
+            for(uint256 i = 0; i < count; i++){
+                tokenIDs[i] = temp[i];
+            }
+        }
+        else{
+            total = super.balanceOf(player);
+            uint256[] memory temp = new uint256[](total);
+            for(uint256 i = 0; i < total; i++){
+                (l, index, element, elite) = getItemAttributes_exceptBattleValues(super.tokenOfOwnerByIndex(player,i));
+                if(level != 0){
+                    if(l != level)  continue;        
+                }
+                if(containIsElite){
+                    if(elite != isElite)    continue;
+                }
+                temp[count] = super.tokenOfOwnerByIndex(player,i);
+                count++;
+            }
+            tokenIDs = new uint256[](count);
+            for(uint256 i = 0; i < count; i++){
+                tokenIDs[i] = temp[i];
+            }
+        }
+        return tokenIDs;
+    }
+
+    function getTokensCount(address player, uint32 level, bool containIsElite, bool isElite) public view onlyOwner returns(uint256){
+        uint256[] memory tokenIDs = getToken(player, level, containIsElite, isElite);
+        return tokenIDs.length;
+    }
+
+    function getToken(address player, uint32 level, bool containIsElite, bool isElite, uint32 indexInLevel) public view onlyOwner returns(uint256){
+        uint256[] memory tokenIDs = getToken(player, level, containIsElite, isElite);
+
+        uint32 l;
+        uint32 index;
+        uint32 element;
+        bool elite;
+        uint256 count = 0;
+        for(uint256 i = 0; i < tokenIDs.length; i++){
+            (l, index, element, elite) = getItemAttributes_exceptBattleValues(tokenIDs[i]);
+            if(index == indexInLevel)   count++;
+        }
+        return count;
+    }
+
+
 
     ///**************************************************************  Start: Game Rules ******************************************************************/
     ///**************************************************************  Start: Game Rules ******************************************************************/
@@ -395,7 +486,7 @@ contract Genesis is ERC721, Ownable{
     //*************end:通用方法****************/
 
     //查询合约中的ether余额
-    function getContractBalance() public view returns (uint256) {
+    function getContractBalance() public view onlyOwner returns (uint256) {
         return address(this).balance;
     }
 
