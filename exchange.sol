@@ -2,12 +2,13 @@
 pragma solidity >=0.4.22 <0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721Holder.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "./Genesis.sol";
 
-contract Exchange is Genesis{
+contract Exchange is Genesis, ERC721Holder{
     struct listedToken{
         uint256 tokenID;
         uint256 bid;        //以ETH为单位
