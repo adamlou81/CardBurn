@@ -2,12 +2,13 @@
 pragma solidity >=0.4.22 <0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+import "./Genesis.sol";
 
-contract Genesis is ERC721, Ownable, IERC721Receiver{
+contract CardBurn is ERC721, Ownable, IERC721Receiver{  
+    
     using Counters for Counters.Counter;
     using Strings for uint256;
 
@@ -535,5 +536,4 @@ contract Genesis is ERC721, Ownable, IERC721Receiver{
     // function withdrawContractBalanceHalf() public onlyOwner {
     //     msg.sender.transfer(address(this).balance / 2);
     // }
-
 }
